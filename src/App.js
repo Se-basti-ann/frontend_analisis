@@ -44,7 +44,7 @@ const FileUploader = () => {
     formData.append('tipo_archivo', fileType);
 
     try {
-      const response = await axios.post('http://18.117.10.185:8000/upload/', formData, {
+      const response = await axios.post('https://frontendfastapi.duckdns.org/upload/', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         responseType: 'blob'
       });
