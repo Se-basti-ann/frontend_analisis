@@ -1,22 +1,24 @@
 import React, { useState, useCallback } from 'react';
 import axios from 'axios';
 import { useDropzone } from 'react-dropzone';
-import { 
-  Box, Button, Typography, Paper, FormControlLabel, Radio, 
-  RadioGroup, CircularProgress, Table, TableBody, TableCell, 
+import {
+  Box, Button, Typography, Paper, FormControlLabel, Radio,
+  RadioGroup, CircularProgress, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, TextField, Autocomplete,
   Checkbox, Chip, FormControl, InputLabel, MenuItem, Select,
-  createTheme, ThemeProvider 
+  createTheme, ThemeProvider
 } from '@mui/material';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import * as XLSX from 'xlsx';
+// En tu componente React
+import { ResponsiveContainer } from 'recharts';
 
 const darkTheme = createTheme({
   palette: {
     mode: 'dark',
     primary: { main: '#90caf9' },
     secondary: { main: '#f48fb1' },
-    background: { default: '#121212', paper: '#1e1e1e' },
+    background: { default: '#593a3a', paper: '#1e1e1e' },
     text: { primary: '#ffffff', secondary: '#b3b3b3' },
     divider: '#424242'
   },
@@ -30,8 +32,12 @@ const processSheetData = (sheetData, fileType) => {
   const materialsSet = new Set();
 
   sheetData.forEach(row => {
-    const entry = { materiales: [] };
-    
+    const entry = {
+      materiales: [],
+      materialesInstalados: [],
+      materialesRetirados: []
+    };
+
     const filteredRow = Object.keys(row).reduce((acc, key) => {
       if (key !== 'A' && !key.startsWith('0')) {
         acc[key] = row[key]
@@ -41,41 +47,62 @@ const processSheetData = (sheetData, fileType) => {
     if (fileType === 'modernizacion') {
       entry.ot = row['2.Nro de O.T.'] || '';
       entry.nodo = row['1.NODO DEL POSTE.'] || '';
-      
+
       // Procesar materiales modernización
       for (let i = 1; i <= 10; i++) {
         const material = row[`MATERIAL ${i}`] || row[`Material ${i}`];
         const cantidad = row[`CANTIDAD MATERIAL ${i}`] || row[`CANTIDAD DE MATERIAL ${i}`];
-        
+
         if (material && cantidad) {
           const materialKey = material.toString().toUpperCase().trim();
-          entry.materiales.push({
+          entry.materialesInstalados.push({
             nombre: materialKey,
-            cantidad: parseFloat(cantidad) || 0
+            cantidad: parseFloat(cantidad) || 0,
+            tipo: 'instalado'
           });
           materialsSet.add(materialKey);
         }
       }
+
+      // Procesar materales retirados
+      Object.keys(row).forEach(col => {
+        const colStr = col.toString();
+        if (colStr.includes('RETIRADA')) {
+          const cantidad = row[col];
+          if (cantidad && parseFloat(cantidad) > 0) {
+            const nombre = colStr.split('.').pop().trim().toUpperCase();
+            entry.materialesRetirados.push({
+              nombre: nombre,
+              cantidad: parseFloat(cantidad) || 0,
+              tipo: 'retirado'
+            });
+            materialsSet.add(nombre);
+          }
+        }
+      });
     } else {
       entry.ot = row['6.Nro.Orden Energis'] || '';
       entry.nodo = row['5.Nodo'] || '';
-      
+
       // Procesar materiales mantenimiento
       for (let i = 1; i <= 10; i++) {
         const material = row[`MATERIAL ${i}`];
         const cantidad = row[`CANTIDAD MATERIAL ${i}`];
-        
+
         if (material && cantidad) {
           const materialKey = material.toString().toUpperCase().trim();
-          entry.materiales.push({
+          entry.materialesInstalados.push({
             nombre: materialKey,
-            cantidad: parseFloat(cantidad) || 0
+            cantidad: parseFloat(cantidad) || 0,
+            tipo: 'instalado'
           });
           materialsSet.add(materialKey);
         }
       }
     }
-    
+
+    //Combinar todos los materiales para vista previa
+    entry.materiales = [...entry.materialesInstalados, ...entry.materialesRetirados];
     results.push(entry);
   });
 
@@ -92,6 +119,7 @@ const FileUploader = () => {
   const [previewData, setPreviewData] = useState([]);
   const [materialsList, setMaterialsList] = useState([]);
   const [selectedMaterials, setSelectedMaterials] = useState([]);
+  const [materialTypeFilter, setMaterialTypeFilter] = useState('all');
   const [filters, setFilters] = useState({
     nodo: '',
     ot: '',
@@ -109,11 +137,11 @@ const FileUploader = () => {
       const workbook = XLSX.read(data, { type: 'array' });
       const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = XLSX.utils.sheet_to_json(firstSheet);
-      
+
       const { processedData, materials } = processSheetData(jsonData, fileType);
       setProcessedData(processedData);
       setMaterialsList(materials);
-      setPreviewData(jsonData.slice(0, 5)); 
+      setPreviewData(jsonData.slice(0, 5));
     };
     reader.readAsArrayBuffer(file);
   }, [fileType]);
@@ -147,18 +175,32 @@ const FileUploader = () => {
     }
     setIsProcessing(false);
   };
-  
+
   const filteredData = processedData.filter(item => {
     const matchesNodo = item.nodo?.toString().includes(filters.nodo);
     const matchesOT = item.ot?.toString().includes(filters.ot);
-    const matchesMaterial = selectedMaterials.length === 0 || 
-      item.materiales.some(m => selectedMaterials.includes(m.nombre));
-    
+
+    // Obtener materiales según el filtro
+    const materialesFiltrados = materialTypeFilter === 'all'
+      ? item.materiales
+      : materialTypeFilter === 'instalado'
+        ? item.materialesInstalados
+        : item.materialesRetirados;
+
+    const matchesMaterial = selectedMaterials.length === 0 ||
+      materialesFiltrados.some(m => selectedMaterials.includes(m.nombre));
+
     return matchesNodo && matchesOT && matchesMaterial;
   }).slice(0, 10);
 
   const chartData = filteredData.reduce((acc, item) => {
-    item.materiales.forEach(material => {
+    const materiales = materialTypeFilter === 'all'
+      ? item.materiales
+      : materialTypeFilter === 'instalado'
+        ? item.materialesInstalados
+        : item.materialesRetirados;
+
+    materiales.forEach(material => {
       const existing = acc.find(m => m.nombre === material.nombre);
       if (existing) {
         existing.cantidad += material.cantidad;
@@ -169,34 +211,34 @@ const FileUploader = () => {
     return acc;
   }, []);
 
-   // Función para calcular tamaño dinámico
-   const getDynamicStyles = (dataLength) => {
+  // Función para calcular tamaño dinámico
+  const getDynamicStyles = (dataLength) => {
     const baseSize = 800;
     const minHeight = 400;
     const maxBars = 30;
-    
+
     return {
       width: Math.min(baseSize, window.innerWidth - 100),
       height: Math.max(minHeight, dataLength * 20),
-      margin: { 
-        top: 20, 
-        right: dataLength > maxBars ? 10 : 30, 
-        left: dataLength > maxBars ? 50 : 20, 
-        bottom: 5 
+      margin: {
+        top: 20,
+        right: dataLength > maxBars ? 10 : 30,
+        left: dataLength > maxBars ? 50 : 20,
+        bottom: 5
       }
     };
   };
 
   return (
     <ThemeProvider theme={darkTheme}>
-      <Box sx={{ 
-        maxWidth: 1200, 
-        margin: '2rem auto', 
+      <Box sx={{
+        maxWidth: 1200,
+        margin: '2rem auto',
         padding: 3,
         backgroundColor: darkTheme.palette.background.default
       }}>
-        <Paper elevation={3} sx={{ 
-          padding: 3, 
+        <Paper elevation={3} sx={{
+          padding: 3,
           mb: 3,
           backgroundColor: darkTheme.palette.background.paper
         }}>
@@ -204,32 +246,32 @@ const FileUploader = () => {
             Analizador de Archivos Técnicos
           </Typography>
 
-          <RadioGroup 
-            row 
-            value={fileType} 
+          <RadioGroup
+            row
+            value={fileType}
             onChange={(e) => setFileType(e.target.value)}
             sx={{ mb: 3 }}
           >
-            <FormControlLabel 
-              value="modernizacion" 
-              control={<Radio color="primary" />} 
-              label="Modernización" 
+            <FormControlLabel
+              value="modernizacion"
+              control={<Radio color="primary" />}
+              label="Modernización"
               sx={{ color: darkTheme.palette.text.primary }}
             />
-            <FormControlLabel 
-              value="mantenimiento" 
-              control={<Radio color="primary" />} 
+            <FormControlLabel
+              value="mantenimiento"
+              control={<Radio color="primary" />}
               label="Mantenimiento"
               sx={{ color: darkTheme.palette.text.primary }}
             />
           </RadioGroup>
 
-          <Box 
+          <Box
             {...getRootProps()}
             sx={{
               border: '2px dashed',
-              borderColor: isDragActive 
-                ? darkTheme.palette.primary.main 
+              borderColor: isDragActive
+                ? darkTheme.palette.primary.main
                 : darkTheme.palette.divider,
               borderRadius: 2,
               padding: 4,
@@ -241,9 +283,9 @@ const FileUploader = () => {
           >
             <input {...getInputProps()} />
             <Typography variant="body1" sx={{ color: darkTheme.palette.text.primary }}>
-              {isDragActive 
-                ? '¡Suelta el archivo aquí!' 
-                : 'Arrastra un archivo Excel o haz clic para seleccionar'}
+              {isDragActive
+                ? '¡Suelta el archivo aquí!'
+                : 'Arrastra un archivo Excel o haz clic para seleccionar (SOLO SE RECIBEN ARCHIVOS .XLSX)'}
             </Typography>
             {files[0] && (
               <Typography variant="caption" sx={{ mt: 1, color: darkTheme.palette.text.secondary }}>
@@ -257,23 +299,23 @@ const FileUploader = () => {
               <Typography variant="h6" gutterBottom sx={{ color: darkTheme.palette.text.primary }}>
                 Vista Previa
               </Typography>
-              <TableContainer component={Paper} sx={{ maxHeight: 800}}>
+              <TableContainer component={Paper} sx={{ maxHeight: 800 }}>
                 <Table size="small" stickyHeader>
                   <TableHead>
                     <TableRow>
                       {Object.keys(previewData[0])
-                      .filter(key => !['A', '0'].includes(key)).map((header, index) => (
-                        <TableCell 
-                          key={index} 
-                          sx={{ 
-                            fontWeight: 'bold', 
-                            color: darkTheme.palette.text.primary,
-                            backgroundColor: darkTheme.palette.background.paper
-                          }}
-                        >
-                          {header}
-                        </TableCell>
-                      ))}
+                        .filter(key => !['A', '0'].includes(key)).map((header, index) => (
+                          <TableCell
+                            key={index}
+                            sx={{
+                              fontWeight: 'bold',
+                              color: darkTheme.palette.text.primary,
+                              backgroundColor: darkTheme.palette.background.paper
+                            }}
+                          >
+                            {header}
+                          </TableCell>
+                        ))}
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -282,13 +324,13 @@ const FileUploader = () => {
                         {Object.entries(row)
                           .filter(([key]) => !['A', '0'].includes(key))
                           .map(([key, value], cellIndex) => (
-                          <TableCell 
-                            key={cellIndex}
-                            sx={{ color: darkTheme.palette.text.primary }}
-                          >
-                            {value}
-                          </TableCell>
-                        ))}
+                            <TableCell
+                              key={cellIndex}
+                              sx={{ color: darkTheme.palette.text.primary }}
+                            >
+                              {value}
+                            </TableCell>
+                          ))}
                       </TableRow>
                     ))}
                   </TableBody>
@@ -297,7 +339,20 @@ const FileUploader = () => {
             </Box>
           )}
 
-<Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+          <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+            {/* Filtro para cada tipo de material*/}
+            <FormControl sx={{ minWidth: 200 }} size='small'>
+              <InputLabel>Tipo de material</InputLabel>
+              <Select
+                value={materialTypeFilter}
+                onChange={(e) => setMaterialTypeFilter(e.target.value)}
+                label="Tipo de material"
+              >
+                <MenuItem value="all">Todos los materiales</MenuItem>
+                <MenuItem value="instalado">Instalados</MenuItem>
+                <MenuItem value="retirado">Retirados</MenuItem>
+              </Select>
+            </FormControl>
             <TextField
               label="Filtrar por Nodo"
               variant="outlined"
@@ -375,54 +430,74 @@ const FileUploader = () => {
           </TableContainer>
 
           {/* Gráfico Actualizado */}
-          <BarChart
-            {...getDynamicStyles(chartData.length)}
-            data={chartData}
+
+          <ResponsiveContainer
+            width="100%"
+            height="100%"
+            className="responsive-chart-container"
           >
-            <CartesianGrid strokeDasharray="3 3" stroke={darkTheme.palette.divider} />
-            <XAxis
-              dataKey="nombre"
-              interval={0}
-              angle={chartData.length > 0.5 ? -20 : -90}
-              dx={chartData.length > 15 ? -10 : 0}
-              dy={chartData.length > 35 ? 15 : 0}
-              tick={{
-                fontSize: chartData.length > 30 ? 10 : 12,
-                fill: darkTheme.palette.text.primary
+            <BarChart
+              data={chartData}
+              margin={{
+                top: 20,
+                right: 30,
+                left: 20,
+                bottom: chartData.length > 15 ? 100 : 40
               }}
-              height={chartData.length * 15 + 40}
-            />
-            <YAxis
-              tick={{ fill: darkTheme.palette.text.primary }}
-              label={{
-                value: 'Cantidad',
-                angle: -90,
-                position: 'insideLeft',
-                fill: darkTheme.palette.text.primary,
-                fontSize: 12
-              }}
-            />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: darkTheme.palette.background.paper,
-                borderColor: darkTheme.palette.divider,
-                color: darkTheme.palette.text.primary,
-                maxWidth: 300
-              }}
-            />
-            <Legend
-              wrapperStyle={{
-                paddingTop: chartData.length > 30 ? 20 : 0,
-                color: darkTheme.palette.text.primary
-              }}
-            />
-            <Bar
-              dataKey="cantidad"
-              fill={darkTheme.palette.primary.main}
-              name="Cantidad"
-              barSize={Math.max(10, 40 - (chartData.length * 0.5))}
-            />
-          </BarChart>
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke={darkTheme.palette.divider} />
+              <XAxis
+                dataKey="nombre"
+                interval={0}
+                angle={chartData.length > 0.5 ? -20 : -90}
+                dx={chartData.length > 15 ? -10 : 0}
+                dy={chartData.length > 35 ? 15 : 0}
+                tick={{
+                  fontSize: chartData.length > 30 ? 10 : 12,
+                  fill: darkTheme.palette.text.primary
+                }}
+                height={chartData.length * 15 + 40}
+              />
+              <YAxis
+                tick={{ fill: darkTheme.palette.text.primary }}
+                label={{
+                  value: 'Cantidad',
+                  angle: -90,
+                  position: 'insideLeft',
+                  fill: darkTheme.palette.text.primary,
+                  fontSize: 12
+                }}
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: darkTheme.palette.background.paper,
+                  borderColor: darkTheme.palette.divider,
+                  color: darkTheme.palette.text.primary,
+                  maxWidth: 300
+                }}
+              />
+              <Legend
+                wrapperStyle={{
+                  paddingTop: chartData.length > 30 ? 20 : 0,
+                  color: darkTheme.palette.text.primary
+                }}
+              />
+              <Bar
+                dataKey="cantidad"
+                fill={darkTheme.palette.primary.main}
+                name="Cantidad"
+                barSize={Math.max(10, 40 - (chartData.length * 0.5))}
+              />
+              {materialTypeFilter === 'all' && (
+                <Bar
+                  dataKey="tipo"
+                  fill={darkTheme.palette.secondary.main}
+                  name="Tipo"
+                  barSize={Math.max(10, 40 - (chartData.length * 0.5))}
+                />
+              )}
+            </BarChart>
+          </ResponsiveContainer>
 
           <Button
             variant="contained"

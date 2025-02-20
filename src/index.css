@@ -1,3 +1,6 @@
+html {
+  background-color: rgb(95, 94, 94);
+}
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
@@ -5,8 +8,90 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: #1a1a1a;
+  color: white;
+}
+/* Contenedor principal responsivo */
+.main-container {
+  padding: 1rem;
+  max-width: 100%;
+  margin: 0 auto;
 }
 
+/* Gráfica responsiva */
+.responsive-chart-container {
+  width: 100% !important;
+  height: 400px !important;
+  min-height: 300px;
+  margin: 1rem 0;
+}
+
+@media (min-width: 768px) {
+  .responsive-chart-container {
+    height: 500px !important;
+  }
+}
+
+@media (min-width: 1200px) {
+  .responsive-chart-container {
+    height: 600px !important;
+  }
+}
+
+/* Tabla responsiva */
+.table-container {
+  overflow-x: auto;
+  margin: 1rem 0;
+  max-width: 100%;
+}
+
+/* Filtros responsivos */
+.filters-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (min-width: 600px) {
+  .filters-container {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}
+
+/* Ajustes para móviles */
+@media (max-width: 599px) {
+  .MuiAutocomplete-root {
+    width: 100% !important;
+  }
+  
+  .MuiPaper-root {
+    margin: 0.5rem;
+    padding: 0.5rem !important;
+  }
+  
+  .MuiTableCell-root {
+    padding: 8px !important;
+    font-size: 0.8rem;
+  }
+  
+  .MuiChip-root {
+    font-size: 0.7rem;
+    margin: 2px !important;
+  }
+}
+
+/* Mejoras generales de responsividad */
+.MuiGrid-container {
+  flex-direction: column;
+}
+
+@media (min-width: 960px) {
+  .MuiGrid-container {
+    flex-direction: row;
+  }
+}
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
