@@ -11,7 +11,7 @@ Aplicación web para procesar y analizar archivos Excel técnicos de proyectos d
 ![Vista previa del archivo](./screenshots/preview-view.png)
 
 ### Filtrado de Datos
-![Ejemplo de filtrado avanzado](./screenshots/filterd-view.png)
+![Ejemplo de filtrado avanzado](./screenshots/filtered-view.png)
 
 ### Resultados Gráficos
 ![Gráficos interactivos](./screenshots/charts-view.png)
