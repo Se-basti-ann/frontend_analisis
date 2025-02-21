@@ -17,7 +17,7 @@ Aplicación web para procesar y analizar archivos Excel técnicos de proyectos d
 ![Gráficos interactivos](./screenshots/charts-view.png)
 
 ### Puedes ingresar para visualizar 
-Ingresa el excel que encuentras en el repo para probar el uso de la aplicación: 
+Ingresa el excel que encuentras en el repo para probar el uso de la aplicación: https://main.d32bb122o9jw4d.amplifyapp.com/
 
 ## Características Principales
 
