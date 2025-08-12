@@ -44,6 +44,7 @@ const processSheetData = (sheetData, fileType) => {
       }
       return acc;
     }, {});
+
     if (fileType === 'modernizacion') {
       entry.ot = row['2.Nro de O.T.'] || '';
       entry.nodo = row['1.NODO DEL POSTE.'] || '';
@@ -80,7 +81,7 @@ const processSheetData = (sheetData, fileType) => {
           }
         }
       });
-    } else {
+    } else if (fileType === 'mantenimiento') {
       entry.ot = row['6.Nro.Orden Energis'] || '';
       entry.nodo = row['5.Nodo'] || '';
 
@@ -99,6 +100,102 @@ const processSheetData = (sheetData, fileType) => {
           materialsSet.add(materialKey);
         }
       }
+    } else if (fileType === 'proyecto') {
+      entry.ot = row['2.Nro de Proyecto.'] || '';
+      entry.nodo = row['1.NODO DEL POSTE.'] || '';
+
+      // Procesar códigos de luminarias
+      const codigoN1 = row['2.CODIGO DE LUMINARIA INSTALADA N1.'];
+      const codigoN2 = row['3.CODIGO DE LUMINARIA INSTALADA N2.'];
+      
+      let totalLuminarias = 0;
+      if (codigoN1 && codigoN1.toString().trim() !== '' && !['0', '0.0', 'NO', 'N/A', 'NA'].includes(codigoN1.toString().toUpperCase())) {
+        totalLuminarias++;
+      }
+      if (codigoN2 && codigoN2.toString().trim() !== '' && !['0', '0.0', 'NO', 'N/A', 'NA'].includes(codigoN2.toString().toUpperCase())) {
+        totalLuminarias++;
+      }
+
+      // Determinar tipo de instalación para luminarias
+      if (totalLuminarias > 0) {
+        const tipoInstalacion = row['2.Tipo de Instalacion'] || '';
+        let descripcionLuminaria = 'LUMINARIA INSTALADA EN ESCALERA'; // Default
+        
+        if (tipoInstalacion.toString().toUpperCase().includes('CANASTA')) {
+          descripcionLuminaria = 'LUMINARIA INSTALADA EN CANASTA';
+        } else if (tipoInstalacion.toString().toUpperCase().includes('CAMIONETA')) {
+          descripcionLuminaria = 'LUMINARIA INSTALADA EN CAMIONETA';
+        }
+
+        entry.materialesInstalados.push({
+          nombre: descripcionLuminaria,
+          cantidad: totalLuminarias,
+          tipo: 'instalado'
+        });
+        materialsSet.add(descripcionLuminaria);
+      }
+
+      // Procesar pintado de nodo
+      const pintadoNodo = row['3.Pintado de Nodo?'] || '';
+      if (pintadoNodo.toString().toUpperCase().includes('SI')) {
+        const materialPintado = 'PINTADO DE NODO';
+        entry.materialesInstalados.push({
+          nombre: materialPintado,
+          cantidad: 1,
+          tipo: 'instalado'
+        });
+        materialsSet.add(materialPintado);
+      }
+
+      // Procesar materiales instalados (patrón: X.MATERIAL No.Y y X+1.CANTIDAD MATERIAL No.Y)
+      Object.keys(row).forEach(col => {
+        const materialMatch = col.match(/^(\d+)\.MATERIAL No\.(\d+)$/);
+        if (materialMatch) {
+          const prefixNum = parseInt(materialMatch[1]);
+          const materialNum = materialMatch[2];
+          const cantidadCol = `${prefixNum + 1}.CANTIDAD MATERIAL No.${materialNum}`;
+          
+          const material = row[col];
+          const cantidad = row[cantidadCol];
+          
+          if (material && cantidad && parseFloat(cantidad) > 0) {
+            const materialKey = material.toString().toUpperCase().trim();
+            if (materialKey !== 'NINGUNO') {
+              entry.materialesInstalados.push({
+                nombre: materialKey,
+                cantidad: parseFloat(cantidad) || 0,
+                tipo: 'instalado'
+              });
+              materialsSet.add(materialKey);
+            }
+          }
+        }
+      });
+
+      // Procesar materiales desmontados (patrón: X.MATERIAL DESMONTADO No.Y y X+1.CANTIDAD MATERIAL DESMONTADO No.Y)
+      Object.keys(row).forEach(col => {
+        const materialMatch = col.match(/^(\d+)\.MATERIAL DESMONTADO No\.(\d+)$/);
+        if (materialMatch) {
+          const prefixNum = parseInt(materialMatch[1]);
+          const materialNum = materialMatch[2];
+          const cantidadCol = `${prefixNum + 1}.CANTIDAD MATERIAL DESMONTADO No.${materialNum}`;
+          
+          const material = row[col];
+          const cantidad = row[cantidadCol];
+          
+          if (material && cantidad && parseFloat(cantidad) > 0) {
+            const materialKey = material.toString().toUpperCase().trim();
+            if (materialKey !== 'NO APLICA') {
+              entry.materialesRetirados.push({
+                nombre: materialKey,
+                cantidad: parseFloat(cantidad) || 0,
+                tipo: 'retirado'
+              });
+              materialsSet.add(materialKey);
+            }
+          }
+        }
+      });
     }
 
     //Combinar todos los materiales para vista previa
@@ -264,6 +361,12 @@ const FileUploader = () => {
               label="Mantenimiento"
               sx={{ color: darkTheme.palette.text.primary }}
             />
+            <FormControlLabel
+              value="proyecto"
+              control={<Radio color="primary" />}
+              label="Proyecto"
+              sx={{ color: darkTheme.palette.text.primary }}
+            />
           </RadioGroup>
 
           <Box
@@ -361,7 +464,7 @@ const FileUploader = () => {
               onChange={(e) => setFilters(prev => ({ ...prev, nodo: e.target.value }))}
             />
             <TextField
-              label="Filtrar por OT"
+              label={fileType === 'proyecto' ? 'Filtrar por Proyecto' : 'Filtrar por OT'}
               variant="outlined"
               size="small"
               sx={{ flex: 1 }}
@@ -399,7 +502,7 @@ const FileUploader = () => {
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell>OT</TableCell>
+                  <TableCell>{fileType === 'proyecto' ? 'Proyecto' : 'OT'}</TableCell>
                   <TableCell>Nodo</TableCell>
                   <TableCell>Materiales</TableCell>
                   <TableCell>Cantidad Total</TableCell>
